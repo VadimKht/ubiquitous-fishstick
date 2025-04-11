@@ -11,7 +11,7 @@ int main(void)
 {
     InitWindow(800, 450, "raylib [core] example - basic window");
     Camera3D camera = { 0 };
-    SetTargetFPS(30);
+    SetTargetFPS(60);
     camera.position = (Vector3){ -10.0f, 0.0f, 0.0f }; // Camera position
     camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };      // Camera looking at point
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
@@ -31,7 +31,7 @@ int main(void)
         Vector3 Position;
         float size;
     } Object;
-    Object scene_Objects[3] = {{{0,0,0}, 10}, {{20,0,0}, 10}, {{0,0,20}, 10}};
+    Object scene_Objects[3] = {{{20,0,20}, 10}, {{20,0,0}, 10}, {{0,0,20}, 10}};
 
     while (!WindowShouldClose())
     {
@@ -42,9 +42,19 @@ int main(void)
 
         CameraRotation.x += difference.x*0.01;
         CameraRotation.y -= difference.y*0.01;
+        // 1.5 is pi/2;
+        if(CameraRotation.y > 1.5) CameraRotation.y = 1.5;
+        if(CameraRotation.y < -1.5) CameraRotation.y = -1.5;
         
-        Vector3 TargetTemp = {-sin(CameraRotation.x/10), 0.0, cos(CameraRotation.x/10)};
-        float magn = sqrt(TargetTemp.x*TargetTemp.x+TargetTemp.y*TargetTemp.y+TargetTemp.z*TargetTemp.z);
+        //EDIT: i figured raylib supports quaternions so all of it was effort for NOTHING. pushing to git before changing
+        // it works...
+        // Basically, puts invisible target around the camera and puts it as lookat to turn around
+        // first i take mouse data, and set target at somewhere at 0.0. it sets position around camerarotation
+        // then i used to do magnitude, but apparently sin and cos does it well on its own, so i hardcoded 1
+        // after that, before i set camera target, i set camera position based on rotation for walking
+        // after that i safely put the target to look at around camera.
+        Vector3 TargetTemp = { -sin(CameraRotation.x) * -cos(CameraRotation.y), sin(CameraRotation.y), cos(CameraRotation.x)*-cos(CameraRotation.y)};
+        float magn = 1.0; //sqrt(TargetTemp.x*TargetTemp.x+TargetTemp.y*TargetTemp.y+TargetTemp.z*TargetTemp.z);
         Vector3 NormTargetTemp = {TargetTemp.x/magn, TargetTemp.y/magn, TargetTemp.z/magn};
         if (IsKeyDown(KEY_W)){
             camera.position.x += NormTargetTemp.x * speed;
@@ -80,7 +90,6 @@ int main(void)
             //ShowCursor();
         }
         
-
         Vector3 aroundCamera = {camera.position.x+NormTargetTemp.x, 
             camera.position.y+NormTargetTemp.y,
             camera.position.z+NormTargetTemp.z};
@@ -101,7 +110,9 @@ int main(void)
                     // why doesnt it work right
                     if(distance < 20) AssignText("Ah! you're inside object.");
                     else AssignText("no object");
+                    
                 }
+                //DrawCube(TargetTemp,1,1,1,BLUE);
 
             EndMode3D();
         EndDrawing();
