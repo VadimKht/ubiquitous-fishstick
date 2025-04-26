@@ -2,6 +2,7 @@
 #include<stdio.h>
 #include<math.h>
 #include<cstring>
+#include <raymath.h>
 
 char currentText[256];
 void AssignText(char* text){
@@ -9,7 +10,7 @@ void AssignText(char* text){
 }
 int main(void)
 {
-    InitWindow(800, 450, "raylib [core] example - basic window");
+    InitWindow(800, 450, "apparently raylib app title shows up on discord activity");
     Camera3D camera = { 0 };
     SetTargetFPS(60);
     camera.position = (Vector3){ -10.0f, 0.0f, 0.0f }; // Camera position
@@ -17,7 +18,7 @@ int main(void)
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
     camera.fovy = 70.0f;                                // Camera field-of-view Y
     camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
-    float speed = 0.1f;
+    float speed = 0.01f;
     Vector3 cubePos = {
         (float)0,
         (float)0,
@@ -31,8 +32,12 @@ int main(void)
         Vector3 Position;
         float size;
     } Object;
+    bool inFlight = false;
+    float JumpEnergy = 0;
     Object scene_Objects[3] = {{{20,0,20}, 10}, {{20,0,0}, 10}, {{0,0,20}, 10}};
 
+    Vector3 movedir = {0,0,0};
+    bool standingOnTopOfSomething = false;
     while (!WindowShouldClose())
     {
         // Find mouse position difference between current and previous frame
@@ -43,81 +48,109 @@ int main(void)
         CameraRotation.x += difference.x*0.01;
         CameraRotation.y -= difference.y*0.01;
         // 1.5 is pi/2;
+        // clamp camera y
+        // TODO: learn how to get rid of mirroring whenever looking above this limit
         if(CameraRotation.y > 1.5) CameraRotation.y = 1.5;
         if(CameraRotation.y < -1.5) CameraRotation.y = -1.5;
-        
-        //EDIT: i figured raylib supports quaternions so all of it was effort for NOTHING. pushing to git before changing
-        // it works...
-        // Basically, puts invisible target around the camera and puts it as lookat to turn around
-        // first i take mouse data, and set target at somewhere at 0.0. it sets position around camerarotation
-        // then i used to do magnitude, but apparently sin and cos does it well on its own, so i hardcoded 1
-        // after that, before i set camera target, i set camera position based on rotation for walking
-        // after that i safely put the target to look at around camera.
-        Vector3 TargetTemp = { -sin(CameraRotation.x) * -cos(CameraRotation.y), sin(CameraRotation.y), cos(CameraRotation.x)*-cos(CameraRotation.y)};
-        float magn = 1.0; //sqrt(TargetTemp.x*TargetTemp.x+TargetTemp.y*TargetTemp.y+TargetTemp.z*TargetTemp.z);
-        Vector3 NormTargetTemp = {TargetTemp.x/magn, TargetTemp.y/magn, TargetTemp.z/magn};
-        if (IsKeyDown(KEY_W)){
-            camera.position.x += NormTargetTemp.x * speed;
-            camera.position.z += NormTargetTemp.z * speed;
-        }
-        if (IsKeyDown(KEY_S)){
-            camera.position.x -= NormTargetTemp.x * speed;
-            camera.position.z -= NormTargetTemp.z * speed;
-        }
-        if(IsKeyDown(KEY_D)){
-            camera.position.z += NormTargetTemp.x * speed;
-            camera.position.x -= NormTargetTemp.z * speed;
-        }
-        if (IsKeyDown(KEY_A)){
-            camera.position.z -= NormTargetTemp.x * speed; 
-            camera.position.x += NormTargetTemp.z * speed;
-        }
-        if (IsKeyDown(KEY_LEFT_SHIFT)){
-            speed = 2.0f;
-        }
-        if (IsKeyUp(KEY_LEFT_SHIFT)){
-            speed = 1.0f;
-        }
-        
-        if (IsKeyDown(KEY_SPACE)){
-            camera.position.y += 1.0f;
-        }
-        if (IsKeyUp(KEY_SPACE) && camera.position.y > 0.0){
-            camera.position.y -= 0.4f;
-        }
-        if (IsKeyDown(KEY_E)){
-            DrawText(currentText, 0, 0, 36, RED);
-            //ShowCursor();
-        }
-        
-        Vector3 aroundCamera = {camera.position.x+NormTargetTemp.x, 
-            camera.position.y+NormTargetTemp.y,
-            camera.position.z+NormTargetTemp.z};
 
-        camera.target = aroundCamera;  
+        //Quaternion rotation = QuaternionFromEuler(0, -CameraRotation.x, -CameraRotation.y);
+        //Quaternion qYaw   = QuaternionFromAxisAngle((Vector3){0, 1, 0}, -CameraRotation.x); // yaw around Y
+        //Quaternion qPitch = QuaternionFromAxisAngle((Vector3){1, 0, 0}, -CameraRotation.y); // pitch around X
+        //Quaternion qrot = QuaternionMultiply(qYaw, qPitch);
 
-    
+        // QuaternionFromEuler order is different so it switched up places
+        Quaternion qyawpitch = QuaternionFromEuler(-CameraRotation.y, -CameraRotation.x, 0.0);
+        Vector3 rotated = Vector3RotateByQuaternion({0,0,1}, qyawpitch);
+
+        // for movement
+        Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+        forward.y = 0;
+        Vector3 right = Vector3Normalize(Vector3CrossProduct({0,1,0}, forward));
+        //Vector3 cameraDirection = Vector3Normalize(forward);
+
+        speed = IsKeyDown(KEY_LEFT_SHIFT) ? 0.1f : 1.0f;
+        movedir = {0,0,0};
+        if (IsKeyDown(KEY_W)) movedir = Vector3Add(movedir, forward);
+        if (IsKeyDown(KEY_S)) movedir = Vector3Subtract(movedir, forward);
+        if (IsKeyDown(KEY_A)) movedir = Vector3Add(movedir, right);
+        if (IsKeyDown(KEY_D)) movedir = Vector3Subtract(movedir, right);
+        movedir = Vector3Normalize(movedir);
+
+        if (IsKeyDown(KEY_E)) DrawText(currentText, 0, 0, 36, RED);
+        Vector3 slideDirection = {0,0,0};
         BeginDrawing();
             ClearBackground(RAYWHITE);        
             BeginMode3D(camera);
+            standingOnTopOfSomething = false;
                 for(int i = 0; i < sizeof(scene_Objects)/sizeof(scene_Objects[0]); i++)
                 {
                     const float size = scene_Objects[i].size;
-                    DrawCube(scene_Objects[i].Position, size, size, size, RED);
-                    float distance = sqrt(pow(camera.position.x-scene_Objects[i].Position.x, 2) + 
-                                            pow(camera.position.y-scene_Objects[i].Position.y, 2) + 
-                                            pow(camera.position.z-scene_Objects[i].Position.z, 2));
-                    // why doesnt it work right
-                    if(distance < 20) AssignText("Ah! you're inside object.");
-                    else AssignText("no object");
-                    
-                }
-                //DrawCube(TargetTemp,1,1,1,BLUE);
+                    Vector3 colisionDirection = Vector3Subtract(camera.position, scene_Objects[i].Position);
+                    // circle of same size
+                    //if(Vector3Length(colisionDirection) < size/2+1) 
+                    // unrotatable rectangle with fixed scale of size
+                    // for some reason shakes player
+                    // the position y is slidig player across ceilig dependig on camera position lol todo fix
+                    Vector3 coldir = Vector3Scale(Vector3Normalize(colisionDirection), speed);
+                    if(camera.position.x > scene_Objects[i].Position.x-(size/2+coldir.x+1.5) &&
+                    camera.position.x < scene_Objects[i].Position.x+(size/2+coldir.x+1.5) &&
+                    camera.position.z > scene_Objects[i].Position.z-(size/2+coldir.y+1.5) &&
+                    camera.position.z < scene_Objects[i].Position.z+(size/2+coldir.y+1.5) &&
 
+                    camera.position.y > scene_Objects[i].Position.y-(size/2) &&
+                    camera.position.y < scene_Objects[i].Position.y+(size/2)
+                    ){
+                        Vector3 wallNormal = Vector3Normalize({colisionDirection.x, 0, colisionDirection.z});
+                        if (Vector3Length(wallNormal) > 0.01f) {
+                            movedir = Vector3Subtract(movedir, Vector3Scale(wallNormal, -1));
+                        }
+                    }
+                    // temporary? Y colision solution - i know, it's terrible. while past if codition check whether inside x and z
+                    // axis, but not y, this check whether its inside y axis and not x
+                    // this solves problem of sliding across roof otherwise
+                    if(
+                        camera.position.x < scene_Objects[i].Position.x+(size/2+speed+0.5) &&
+                        camera.position.x > scene_Objects[i].Position.x-(size/2+speed+0.5) &&
+                        camera.position.z < scene_Objects[i].Position.z+(size/2+speed+0.5) &&
+                        camera.position.z > scene_Objects[i].Position.z-(size/2+speed+0.5) &&
+
+                        camera.position.y > scene_Objects[i].Position.y-(size/2+speed+0.5) &&
+                        camera.position.y < scene_Objects[i].Position.y+(size/2+speed+2) 
+                        ||
+                        camera.position.y < 0.1f
+                    )
+                    {
+                       standingOnTopOfSomething = true;
+                       JumpEnergy = 0;
+                    }
+
+                    DrawCube(scene_Objects[i].Position, size, size, size, RED);
+                }
+                if(standingOnTopOfSomething)
+                {
+                    inFlight = false;
+                }
+                else{ inFlight = true;}
+                    
+                movedir = Vector3Add(movedir, slideDirection);
+                camera.position = Vector3Add(camera.position, Vector3Scale(movedir, speed));
+
+                if (IsKeyDown(KEY_SPACE) && !inFlight){
+                    JumpEnergy = 2;
+                    inFlight = true;
+                }
+
+                if(inFlight)
+                {
+                    JumpEnergy -= 0.1f;
+                    camera.position.y += JumpEnergy;
+                } 
+
+                camera.target = Vector3Add(rotated, camera.position);
             EndMode3D();
         EndDrawing();
-    }
 
+    }
     CloseWindow();
 
     return 0;
