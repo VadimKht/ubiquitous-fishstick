@@ -8,11 +8,33 @@ char currentText[256];
 void AssignText(char* text){
     strncpy(currentText, text, sizeof currentText - 1);
 }
+bool CheckCollissionXZ(Vector3 pos1, Vector3 pos2, float size, float speed = 1.0){
+
+    Vector3 coldir = Vector3Scale(Vector3Normalize(Vector3Subtract(pos1, pos2)), speed);
+    if(pos1.x > pos2.x-(size/2+coldir.x+1.5) &&
+    pos1.x < pos2.x+(size/2+coldir.x+1.5) &&
+    pos1.z > pos2.z-(size/2+coldir.y+1.5) &&
+    pos1.z < pos2.z+(size/2+coldir.y+1.5) &&
+
+    pos1.y > pos2.y-(size/2) &&
+    pos1.y < pos2.y+(size/2+6)) return true;
+    return false;
+}
+bool CheckCollisionY(Vector3 pos1, Vector3 pos2, float size, float speed = 1.0){
+    if(pos1.x < pos2.x+(size/2+speed+1.5) &&
+    pos1.x > pos2.x-(size/2+speed+1.5) &&
+    pos1.z < pos2.z+(size/2+speed+1.5) &&
+    pos1.z > pos2.z-(size/2+speed+1.5) &&
+
+    pos1.y > pos2.y+(size/2+speed+5) &&
+    pos1.y < pos2.y+(size/2+speed+6)) return true;
+    return false;
+}
 int main(void)
 {
-    InitWindow(800, 450, "apparently raylib app title shows up on discord activity");
+    InitWindow(800, 450, "dashrun");
     Camera3D camera = { 0 };
-    SetTargetFPS(60);
+    SetTargetFPS(30);
     camera.position = (Vector3){ -10.0f, 0.0f, 0.0f }; // Camera position
     camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };      // Camera looking at point
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
@@ -34,7 +56,9 @@ int main(void)
     } Object;
     bool inFlight = false;
     float JumpEnergy = 0;
-    Object scene_Objects[3] = {{{20,0,20}, 10}, {{20,0,0}, 10}, {{0,0,20}, 10}};
+    Object scene_Objects[9] = { {{20,0,20}, 10}, {{20,10,0}, 10}, {{0,20,20}, 10},
+                                {{20,30,20}, 10}, {{20,40,0}, 10}, {{0,40,20}, 10},
+                                {{40,40,20}, 10}, {{80,40,0}, 10}, {{120,40,20}, 10} };
 
     Vector3 movedir = {0,0,0};
     bool standingOnTopOfSomething = false;
@@ -47,6 +71,7 @@ int main(void)
 
         CameraRotation.x += difference.x*0.01;
         CameraRotation.y -= difference.y*0.01;
+
         // 1.5 is pi/2;
         // clamp camera y
         // TODO: learn how to get rid of mirroring whenever looking above this limit
@@ -77,62 +102,40 @@ int main(void)
         movedir = Vector3Normalize(movedir);
 
         if (IsKeyDown(KEY_E)) DrawText(currentText, 0, 0, 36, RED);
-        Vector3 slideDirection = {0,0,0};
+        standingOnTopOfSomething = false;
         BeginDrawing();
             ClearBackground(RAYWHITE);        
             BeginMode3D(camera);
-            standingOnTopOfSomething = false;
                 for(int i = 0; i < sizeof(scene_Objects)/sizeof(scene_Objects[0]); i++)
                 {
                     const float size = scene_Objects[i].size;
                     Vector3 colisionDirection = Vector3Subtract(camera.position, scene_Objects[i].Position);
                     // circle of same size
                     //if(Vector3Length(colisionDirection) < size/2+1) 
-                    // unrotatable rectangle with fixed scale of size
-                    // for some reason shakes player
-                    // the position y is slidig player across ceilig dependig on camera position lol todo fix
-                    Vector3 coldir = Vector3Scale(Vector3Normalize(colisionDirection), speed);
-                    if(camera.position.x > scene_Objects[i].Position.x-(size/2+coldir.x+1.5) &&
-                    camera.position.x < scene_Objects[i].Position.x+(size/2+coldir.x+1.5) &&
-                    camera.position.z > scene_Objects[i].Position.z-(size/2+coldir.y+1.5) &&
-                    camera.position.z < scene_Objects[i].Position.z+(size/2+coldir.y+1.5) &&
 
-                    camera.position.y > scene_Objects[i].Position.y-(size/2) &&
-                    camera.position.y < scene_Objects[i].Position.y+(size/2)
+                    //Vector3 coldir = Vector3Scale(Vector3Normalize(colisionDirection), speed);
+                    if(CheckCollissionXZ(camera.position, scene_Objects[i].Position, scene_Objects[i].size, speed)
                     ){
                         Vector3 wallNormal = Vector3Normalize({colisionDirection.x, 0, colisionDirection.z});
                         if (Vector3Length(wallNormal) > 0.01f) {
                             movedir = Vector3Subtract(movedir, Vector3Scale(wallNormal, -1));
                         }
                     }
-                    // temporary? Y colision solution - i know, it's terrible. while past if codition check whether inside x and z
-                    // axis, but not y, this check whether its inside y axis and not x
-                    // this solves problem of sliding across roof otherwise
-                    if(
-                        camera.position.x < scene_Objects[i].Position.x+(size/2+speed+0.5) &&
-                        camera.position.x > scene_Objects[i].Position.x-(size/2+speed+0.5) &&
-                        camera.position.z < scene_Objects[i].Position.z+(size/2+speed+0.5) &&
-                        camera.position.z > scene_Objects[i].Position.z-(size/2+speed+0.5) &&
 
-                        camera.position.y > scene_Objects[i].Position.y-(size/2+speed+0.5) &&
-                        camera.position.y < scene_Objects[i].Position.y+(size/2+speed+2) 
-                        ||
-                        camera.position.y < 0.1f
-                    )
+                    if(CheckCollisionY(camera.position, scene_Objects[i].Position, scene_Objects[i].size)
+                    ||
+                    camera.position.y < 0.1f)
                     {
                        standingOnTopOfSomething = true;
                        JumpEnergy = 0;
                     }
-
-                    DrawCube(scene_Objects[i].Position, size, size, size, RED);
-                }
-                if(standingOnTopOfSomething)
-                {
-                    inFlight = false;
-                }
-                else{ inFlight = true;}
                     
-                movedir = Vector3Add(movedir, slideDirection);
+                    DrawCube(scene_Objects[i].Position, size, size, size, RED);
+                    
+                }
+                if(standingOnTopOfSomething) inFlight = false;
+                else{ inFlight = true; }
+                    
                 camera.position = Vector3Add(camera.position, Vector3Scale(movedir, speed));
 
                 if (IsKeyDown(KEY_SPACE) && !inFlight){
@@ -140,8 +143,7 @@ int main(void)
                     inFlight = true;
                 }
 
-                if(inFlight)
-                {
+                if(inFlight){
                     JumpEnergy -= 0.1f;
                     camera.position.y += JumpEnergy;
                 } 
@@ -149,7 +151,6 @@ int main(void)
                 camera.target = Vector3Add(rotated, camera.position);
             EndMode3D();
         EndDrawing();
-
     }
     CloseWindow();
 

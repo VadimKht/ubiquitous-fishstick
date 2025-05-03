@@ -5,11 +5,11 @@ I use g++ compiler because otherwise it won't accept include math library
 bugs:
 
 1) the colision detection seems to work right, but the code is up to optimization
---2) horizontal collission through corner somehow makes you phase through despite the fact i did rectangle collission check-- (bug gone on hotfix)
-3) colisions make weird motion
+2) colisions by x and z make weird motion 
 
 general goal: very basic parkour game, the rectnagles disappear soon as player moves very fast from rectnagle to rectangle
 steps, in descending order of importance:
+-1) change colision detection from per-cube created to logical only and make CheckCollision True (right now these functions have hard coded changed colisions to prevent player falling through cube) 
 0) get rid of weird motion during sliding across the cube's side
 1) parkour map generation
     challenge: make maps of the intensity/difficulty based on time since start of level. maps meaning file that contains data such as what to do and when
